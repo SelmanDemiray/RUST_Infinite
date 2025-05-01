@@ -98,14 +98,16 @@ RTS_RUST supports several deployment environments:
 
 ---
 
-### 3. Docker Compose (Recommended for Integration Tests)
+### 3. Docker Compose (Recommended for Integration Tests & Deployment)
 
-- **Run everything in containers.**
-- Add a `docker-compose.yml` with services for `rts_server`, `Postgres`, and a static file server for WASM client.
-- Example (not included yet):
+- **Run everything in containers for easy setup and reproducibility.**
+- Includes persistent storage for the database, environment variable configuration, and production-ready build steps.
+- **Exposes server and client on random available ports so multiple instances can run and users can join from any device on the network.**
+
+#### Example `docker-compose.yml`:
 
 ```yaml
-version: '3'
+version: '3.8'
 services:
   db:
     image: postgres:15
@@ -113,20 +115,87 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: rts_game
-    ports: ["5432:5432"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   server:
-    build: ./rts_server
+    build:
+      context: ./rts_server
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgres://user:password@db/rts_game
       SERVER_ADDR: 0.0.0.0:8080
-    depends_on: [db]
-    ports: ["8080:8080"]
+      # Add other environment variables as needed
+    depends_on:
+      db:
+        condition: service_healthy
+    # Expose on a random available host port
+    ports:
+      - "0:8080"
+    restart: unless-stopped
+
   client:
     image: halverneus/static-file-server
     volumes:
-      - ./rts_client_wasm:/web
-    ports: ["4000:80"]
+      - ./rts_client_wasm/pkg:/web
+      - ./rts_client_wasm/index.html:/web/index.html
+    # Expose on a random available host port
+    ports:
+      - "0:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
 ```
+
+#### Build and Run
+
+1. **Build WASM client locally (recommended for dev):**
+   ```sh
+   cd rts_client_wasm
+   wasm-pack build --release --target web
+   cd ..
+   ```
+
+2. **Build and start all services:**
+   ```sh
+   docker-compose up --build -d
+   ```
+
+3. **Find the mapped ports:**
+   ```sh
+   docker-compose ps
+   ```
+   or for just the client:
+   ```sh
+   docker-compose port client 80
+   ```
+   and for the server:
+   ```sh
+   docker-compose port server 8080
+   ```
+   The output will show the random host ports, e.g. `0.0.0.0:49154->80/tcp`.
+
+4. **Find your host IP address (for others on your network):**
+   - On Linux/macOS: `hostname -I` or `ip addr`
+   - On Windows: `ipconfig`
+   - Use the IP of your main network interface.
+
+5. **Access the game from any device on your network:**
+   - Open a browser and go to `http://<host-ip>:<client-port>`
+   - The server API/WebSocket will be at `http://<host-ip>:<server-port>`
+
+6. **Apply database migrations (from host):**
+   ```sh
+   docker-compose exec server sqlx migrate run
+   ```
 
 #### Shutting Down
 - Run:
@@ -140,6 +209,22 @@ services:
   docker-compose down -v
   ```
 - This will erase all database data.
+
+#### Tips
+
+- For production, set strong passwords and use secrets for environment variables.
+- Use a reverse proxy (NGINX, Traefik) for SSL/TLS and routing.
+- You can add a Dockerfile to `rts_client_wasm` for fully containerized builds.
+- **To see the mapped ports at any time, run:**
+  ```sh
+  docker-compose ps
+  ```
+  or
+  ```sh
+  docker-compose port client 80
+  docker-compose port server 8080
+  ```
+- **To allow anyone on your network to join, share your host IP and the mapped client port.**
 
 ---
 
@@ -180,6 +265,7 @@ services:
 - wasm-pack (`cargo install wasm-pack`)
 - PostgreSQL
 - Node.js (optional, for some dev tools)
+- Docker & Docker Compose (for containerized deployment)
 
 ---
 

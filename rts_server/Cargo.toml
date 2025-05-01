@@ -1,0 +1,25 @@
+[package]
+name = "rts_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rts_core = { path = "../rts_core" } # Link to the core crate
+
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] } # Choose your DB driver
+dotenvy = "0.15" # For loading .env files
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+thiserror = "1.0" # For error handling
+
+# Optional:
+# uuid = { version = "1", features = ["v4", "serde"] }
+# argon2 = "0.5" # For password hashing
+# jwt = "..." # For JWT handling if using tokens
+# dashmap = "5" # For concurrent hash maps (e.g., connected clients)
